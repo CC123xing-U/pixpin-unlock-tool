@@ -69,11 +69,16 @@ struct PeImage {
         if (dos->e_lfanew < 0 || static_cast<size_t>(dos->e_lfanew) + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) > bytes.size()) {
             throw UnlockError("PixAuth.dll has an invalid PE header offset");
         }
-        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(bytes.data() + dos->e_lfanew);
+        const size_t ntOffset = static_cast<size_t>(dos->e_lfanew);
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(bytes.data() + ntOffset);
         if (nt->Signature != IMAGE_NT_SIGNATURE) throw UnlockError("PixAuth.dll has an invalid PE signature");
         if (nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64) throw UnlockError("PixAuth.dll is not x64");
+        if (nt->FileHeader.SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64) ||
+            ntOffset + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) + nt->FileHeader.SizeOfOptionalHeader > bytes.size()) {
+            throw UnlockError("PixAuth.dll has a truncated PE optional header");
+        }
         if (nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) throw UnlockError("PixAuth.dll is not PE32+");
-        const size_t table = static_cast<size_t>(dos->e_lfanew) + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) + nt->FileHeader.SizeOfOptionalHeader;
+        const size_t table = ntOffset + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) + nt->FileHeader.SizeOfOptionalHeader;
         const size_t tableBytes = static_cast<size_t>(nt->FileHeader.NumberOfSections) * sizeof(IMAGE_SECTION_HEADER);
         if (table > bytes.size() || tableBytes > bytes.size() - table) throw UnlockError("truncated PE section table");
 
@@ -90,8 +95,7 @@ struct PeImage {
 
     size_t rvaToFileOffset(uint32_t rva, size_t size) const {
         for (const auto& s : sections) {
-            const uint64_t span = std::max<uint32_t>(s.virtualSize, s.rawSize);
-            if (rva >= s.virtualAddress && static_cast<uint64_t>(rva) + size <= static_cast<uint64_t>(s.virtualAddress) + span) {
+            if (rva >= s.virtualAddress && static_cast<uint64_t>(rva) + size <= static_cast<uint64_t>(s.virtualAddress) + s.rawSize) {
                 const uint64_t offset = static_cast<uint64_t>(s.rawPointer) + (rva - s.virtualAddress);
                 if (offset + size <= data.size()) return static_cast<size_t>(offset);
             }
@@ -278,16 +282,20 @@ void writeState(const fs::path& path, const fs::path& dll, size_t offset, const 
 }
 
 fs::path defaultExe() {
-    wchar_t buffer[MAX_PATH] = {};
-    const DWORD length = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
-    if (length) {
-        fs::path beside = fs::path(buffer).parent_path() / L"PixPin.exe";
-        if (fs::is_regular_file(beside) && fs::is_regular_file(beside.parent_path() / L"PixAuth.dll")) return beside;
-        // Do not guess a machine-specific installation path. The caller gets a
-        // clear placement message and can use --exe for a custom location.
-        return beside;
+    std::vector<wchar_t> buffer(512);
+    for (;;) {
+        const DWORD length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (!length) return {};
+        if (length < buffer.size() - 1) {
+            fs::path beside = fs::path(std::wstring(buffer.data(), length)).parent_path() / L"PixPin.exe";
+            if (installationFilesPresent(beside)) return beside;
+            // Do not guess a machine-specific installation path. The caller gets a
+            // clear placement message and can use --exe for a custom location.
+            return beside;
+        }
+        if (buffer.size() >= 32768) return {};
+        buffer.resize(buffer.size() * 2);
     }
-    return {};
 }
 
 void launchPixPin(const fs::path& exe) {
@@ -381,6 +389,19 @@ int restore(const fs::path& exe) {
     std::cout << "[1/4] Reading backup and calculating SHA-256...\n";
     const auto original = readFile(backup);
     const std::string originalHash = sha256(original);
+    const auto current = readFile(dll);
+    const std::string currentHash = sha256(current);
+    if (currentHash == originalHash) {
+        if (fs::exists(state)) fs::remove(state);
+        std::cout << "[+] PixAuth.dll is already restored.\n"
+                  << "    SHA-256: " << originalHash << "\n";
+        return 0;
+    }
+    const auto currentImage = PeImage::parse(current);
+    const Target currentTarget = locateTarget(currentImage);
+    if (currentTarget.mode != "patched") {
+        throw UnlockError("current PixAuth.dll does not contain this tool's patch; refusing to overwrite it");
+    }
     const fs::path temp = dll.parent_path() / (dll.filename().wstring() + L".restore.tmp");
     std::cout << "[2/4] Restoring PixAuth.dll atomically...\n";
     writeFile(temp, original);
@@ -400,36 +421,67 @@ void usage() {
               << "  unlock.exe --restore [--exe PATH]\n";
 }
 
-void waitForEnter() {
-    std::cout << "\nPress Enter to continue...";
+void configureConsole() {
+    SetConsoleCP(CP_UTF8);
+    SetConsoleOutputCP(CP_UTF8);
+}
+
+bool chooseChinese() {
+    std::cout << "Select language / 选择语言:\n"
+              << "  1. 简体中文\n"
+              << "  2. English\n"
+              << "Selection / 选择: ";
+    std::string choice;
+    if (!std::getline(std::cin, choice)) return false;
+    return choice == "1" || choice == "zh" || choice == "中文";
+}
+
+void waitForEnter(bool chinese) {
+    std::cout << (chinese ? "\n按 Enter 键继续..." : "\nPress Enter to continue...");
     std::string line;
     std::getline(std::cin, line);
 }
 
-bool askYesNo(const std::string& prompt) {
+bool askYesNo(const std::string& prompt, bool chinese) {
     for (;;) {
-        std::cout << prompt << " [y/N]: ";
+        std::cout << prompt << (chinese ? " [y/N，默认否]: " : " [y/N]: ");
         std::string answer;
         if (!std::getline(std::cin, answer)) return false;
         for (char& c : answer) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (answer == "y" || answer == "yes") return true;
         if (answer.empty() || answer == "n" || answer == "no") return false;
-        std::cout << "Please enter y or n.\n";
+        std::cout << (chinese ? "请输入 y 或 n。\n" : "Please enter y or n.\n");
     }
 }
 
 int interactive(const fs::path& exe) {
     SetConsoleTitleW(L"PixPin Unlock Tool");
+    configureConsole();
+    const bool chinese = chooseChinese();
     for (;;) {
-        std::cout << "\n============================================================\n"
-                  << " PixPin Unlock Tool (local persistent patch)\n"
-                  << "============================================================\n"
-                  << "Expected PixPin: " << (exe.empty() ? "(unknown)" : narrow(exe)) << "\n\n"
-                  << "Current status:\n";
+        if (chinese) {
+            std::cout << "\n============================================================\n"
+                      << " PixPin 解锁工具（本地持久补丁）\n"
+                      << "============================================================\n"
+                      << "检测到的 PixPin: " << (exe.empty() ? "（未知）" : narrow(exe)) << "\n\n"
+                      << "当前状态：\n";
+        } else {
+            std::cout << "\n============================================================\n"
+                      << " PixPin Unlock Tool (local persistent patch)\n"
+                      << "============================================================\n"
+                      << "Expected PixPin: " << (exe.empty() ? "(unknown)" : narrow(exe)) << "\n\n"
+                      << "Current status:\n";
+        }
         if (!installationFilesPresent(exe)) {
-            std::cout << "  [!] PixPin was not found beside this unlock.exe.\n"
-                      << "      Put unlock.exe in the PixPin directory, then run it again.\n"
-                      << "      For a custom location, use: unlock.exe --exe PATH\n";
+            if (chinese) {
+                std::cout << "  [!] 在当前 unlock.exe 目录中没有找到 PixPin。\n"
+                          << "      请将本程序放入 PixPin 根目录后重试。\n"
+                          << "      自定义路径可使用：unlock.exe --exe PATH\n";
+            } else {
+                std::cout << "  [!] PixPin was not found beside this unlock.exe.\n"
+                          << "      Put unlock.exe in the PixPin directory, then run it again.\n"
+                          << "      For a custom location, use: unlock.exe --exe PATH\n";
+            }
         } else {
             try {
                 showStatus(exe);
@@ -437,45 +489,55 @@ int interactive(const fs::path& exe) {
                 std::cout << "  Status unavailable: " << error.what() << "\n";
             }
         }
-        std::cout << "\nChoose an action:\n"
-                  << "  1. Install / update local unlock patch\n"
-                  << "  2. Restore the original PixAuth.dll\n"
-                  << "  3. Show detailed status\n"
-                  << "  4. Launch PixPin\n"
-                  << "  5. Exit\n"
-                  << "\nSelection: ";
+        if (chinese) {
+            std::cout << "\n请选择操作：\n"
+                      << "  1. 安装或更新本地补丁\n"
+                      << "  2. 还原原始 PixAuth.dll\n"
+                      << "  3. 查看详细状态\n"
+                      << "  4. 启动 PixPin\n"
+                      << "  5. 退出\n"
+                      << "\n选择：";
+        } else {
+            std::cout << "\nChoose an action:\n"
+                      << "  1. Install / update local unlock patch\n"
+                      << "  2. Restore the original PixAuth.dll\n"
+                      << "  3. Show detailed status\n"
+                      << "  4. Launch PixPin\n"
+                      << "  5. Exit\n"
+                      << "\nSelection: ";
+        }
         std::string choice;
         if (!std::getline(std::cin, choice)) return 0;
         if (choice == "5" || choice == "q" || choice == "Q") return 0;
 
         try {
             if (choice == "1") {
-                if (askYesNo("Install the local patch now?")) {
+                if (askYesNo(chinese ? "现在安装本地补丁吗？" : "Install the local patch now?", chinese)) {
                     install(exe, false);
-                    if (askYesNo("Launch PixPin now?")) launchPixPin(exe);
+                    if (askYesNo(chinese ? "现在启动 PixPin 吗？" : "Launch PixPin now?", chinese)) launchPixPin(exe);
                 } else {
-                    std::cout << "No changes were made.\n";
+                    std::cout << (chinese ? "未进行任何修改。\n" : "No changes were made.\n");
                 }
-                waitForEnter();
+                waitForEnter(chinese);
             } else if (choice == "2") {
-                if (askYesNo("Restore the original DLL?")) restore(exe);
-                else std::cout << "No changes were made.\n";
-                waitForEnter();
+                if (askYesNo(chinese ? "还原原始 DLL 吗？" : "Restore the original DLL?", chinese)) restore(exe);
+                else std::cout << (chinese ? "未进行任何修改。\n" : "No changes were made.\n");
+                waitForEnter(chinese);
             } else if (choice == "3") {
                 showStatus(exe);
-                waitForEnter();
+                waitForEnter(chinese);
             } else if (choice == "4") {
                 requireInstallation(exe);
-                if (processRunning()) std::cout << "PixPin is already running.\n";
+                if (processRunning()) std::cout << (chinese ? "PixPin 已经在运行。\n" : "PixPin is already running.\n");
                 else launchPixPin(exe);
-                waitForEnter();
+                waitForEnter(chinese);
             } else {
-                std::cout << "Unknown selection. Choose 1, 2, 3, 4, or 5.\n";
-                waitForEnter();
+                std::cout << (chinese ? "选项无效，请选择 1、2、3、4 或 5。\n" : "Unknown selection. Choose 1, 2, 3, 4, or 5.\n");
+                waitForEnter(chinese);
             }
         } catch (const std::exception& error) {
-            std::cout << "[!] " << error.what() << "\n";
-            waitForEnter();
+            std::cout << (chinese ? "[!] 操作失败：" : "[!] ") << error.what() << "\n";
+            waitForEnter(chinese);
         }
     }
 }

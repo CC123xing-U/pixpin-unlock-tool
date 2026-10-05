@@ -1,14 +1,15 @@
 # PixPin Unlock Tool
 
-`unlock.exe` is a standalone Windows C++ utility for applying and removing the local `PixAuth.dll` patch used by this project. It does not require Python, Qt, or a separate runtime installation.
+`unlock.exe` is a standalone Windows C++ utility for applying and removing the local `PixAuth.dll` patch used by this project. It does not require Python, Qt, or a separate runtime installation. The interactive menu supports Simplified Chinese and English.
 
 ## Quick Start
 
 1. Place `unlock.exe` in the PixPin installation directory, next to `PixPin.exe` and `PixAuth.dll`.
 2. Close PixPin.
 3. Double-click `unlock.exe`.
-4. Select **1. Install / update local unlock patch** and confirm with `y`.
-5. Select **4. Launch PixPin** when prompted, or launch PixPin normally later.
+4. Select `1. 简体中文` or `2. English`.
+5. Select the install action and confirm with `y`.
+6. Launch PixPin when prompted, or launch it normally later.
 
 The tool displays its current status when it starts. It also prints the PE sections it inspected, the target RVA/file offset, backup verification, write operation, and SHA-256 verification.
 
@@ -53,7 +54,7 @@ Open an x64 Native Tools command prompt for Visual Studio 2022, or use the insta
 
 ```bat
 call D:\VSBuildTools\VC\Auxiliary\Build\vcvars64.bat
-cl /nologo /std:c++17 /O2 /EHsc /MT unlock_pixpin.cpp bcrypt.lib shell32.lib /link /SUBSYSTEM:CONSOLE /OUT:unlock.exe
+cl /nologo /utf-8 /std:c++17 /O2 /EHsc /MT unlock_pixpin.cpp bcrypt.lib shell32.lib /link /SUBSYSTEM:CONSOLE /OUT:unlock.exe
 ```
 
 The `/MT` build embeds the C++ runtime. The resulting executable only imports system components (`bcrypt.dll` and `KERNEL32.dll`).
@@ -63,3 +64,7 @@ The `/MT` build embeds the C++ runtime. The resulting executable only imports sy
 The patch changes the local `VipInfo::isVip()` gate in the currently analyzed PixPin build. It is reversible and guarded by PE format, x64, executable-section, signature, backup, and post-write hash checks. A vendor update that replaces `PixAuth.dll` may require running the installer again after reviewing the new build.
 
 The account page and cloud subscription data are server-backed presentation/data. This utility operates on the local DLL and does not modify an online account.
+
+## Provenance
+
+This repository contains the original utility source and its compiled executable. It does not include or redistribute PixPin or `PixAuth.dll`. PixPin and related names, software, and assets remain the property of their respective owners; this project is not affiliated with the PixPin developers.
