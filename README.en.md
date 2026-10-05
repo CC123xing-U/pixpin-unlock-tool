@@ -9,7 +9,7 @@
 1. Place `unlock.exe` beside `PixPin.exe` and `PixAuth.dll` in the PixPin installation directory.
 2. Close PixPin.
 3. Double-click `unlock.exe`.
-4. Select `1. 简体中文` or `2. English`.
+4. Select Language.
 5. Select the install action and confirm with `y`.
 6. Launch PixPin when prompted, or launch it later.
 
