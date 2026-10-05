@@ -2,6 +2,8 @@
 
 [English README](README.en.md)
 
+当前版本：**v1.0.0**（首个公开版本）
+
 这是一个独立的 Windows C++ 工具，用于安装、检查和还原本地 `PixAuth.dll` 补丁。不依赖 Python、Qt 或额外的 C++ 运行库。
 
 ## 快速使用

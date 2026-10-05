@@ -28,6 +28,7 @@
 namespace fs = std::filesystem;
 
 constexpr uint32_t kTargetRva = 0xEE950;
+constexpr char kVersion[] = "1.0.0";
 constexpr size_t kPatchSize = 3;
 constexpr char kBackupSuffix[] = ".unlock-original.bak";
 constexpr char kStateSuffix[] = ".unlock-state.json";
@@ -414,7 +415,7 @@ int restore(const fs::path& exe) {
 }
 
 void usage() {
-    std::cout << "unlock.exe - persistent local PixPin patcher\n\n"
+    std::cout << "unlock.exe v" << kVersion << " - persistent local PixPin patcher\n\n"
               << "Usage:\n"
               << "  unlock.exe [--install] [--launch] [--exe PATH]\n"
               << "  unlock.exe --status [--exe PATH]\n"
@@ -455,19 +456,19 @@ bool askYesNo(const std::string& prompt, bool chinese) {
 }
 
 int interactive(const fs::path& exe) {
-    SetConsoleTitleW(L"PixPin Unlock Tool");
+    SetConsoleTitleW(L"PixPin Unlock Tool v1.0.0");
     configureConsole();
     const bool chinese = chooseChinese();
     for (;;) {
         if (chinese) {
             std::cout << "\n============================================================\n"
-                      << " PixPin 解锁工具（本地持久补丁）\n"
+                      << " PixPin 解锁工具 v" << kVersion << "（本地持久补丁）\n"
                       << "============================================================\n"
                       << "检测到的 PixPin: " << (exe.empty() ? "（未知）" : narrow(exe)) << "\n\n"
                       << "当前状态：\n";
         } else {
             std::cout << "\n============================================================\n"
-                      << " PixPin Unlock Tool (local persistent patch)\n"
+                      << " PixPin Unlock Tool v" << kVersion << " (local persistent patch)\n"
                       << "============================================================\n"
                       << "Expected PixPin: " << (exe.empty() ? "(unknown)" : narrow(exe)) << "\n\n"
                       << "Current status:\n";
@@ -558,7 +559,7 @@ int wmain(int argc, wchar_t** argv) {
             else throw UnlockError("unknown argument: " + narrow(arg));
         }
         if (argc == 1) return interactive(exe);
-        std::cout << "PixPin unlock tool (local persistent patch)\n"
+        std::cout << "PixPin unlock tool v" << kVersion << " (local persistent patch)\n"
                   << "Executable: " << (exe.empty() ? "(not detected)" : narrow(exe)) << "\n";
         if (action == Action::Status) return showStatus(exe);
         if (action == Action::Restore) return restore(exe);

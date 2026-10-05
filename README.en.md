@@ -2,6 +2,8 @@
 
 [简体中文 README](README.md)
 
+Current version: **v1.0.0** (first public release)
+
 `unlock.exe` is a standalone Windows C++ utility for installing, checking, and restoring the local `PixAuth.dll` patch. It does not require Python, Qt, or a separate C++ runtime installation.
 
 ## Quick Start
