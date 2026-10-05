@@ -9,7 +9,7 @@
 1. 将 `unlock.exe` 放到 PixPin 根目录，与 `PixPin.exe`、`PixAuth.dll` 放在一起。
 2. 关闭 PixPin。
 3. 双击运行 `unlock.exe`。
-4. 选择 `1. 简体中文`。
+4. 选择语言。
 5. 选择安装补丁并输入 `y` 确认。
 6. 按提示启动 PixPin，或稍后手动启动。
 
