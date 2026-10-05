@@ -1,45 +1,45 @@
-# PixPin Unlock Tool
+# PixPin 本地解锁工具
 
-`unlock.exe` is a standalone Windows C++ utility for applying and removing the local `PixAuth.dll` patch used by this project. It does not require Python, Qt, or a separate runtime installation. The interactive menu supports Simplified Chinese and English.
+[English README](README.en.md)
 
-## Quick Start
+这是一个独立的 Windows C++ 工具，用于安装、检查和还原本地 `PixAuth.dll` 补丁。不依赖 Python、Qt 或额外的 C++ 运行库。
 
-1. Place `unlock.exe` in the PixPin installation directory, next to `PixPin.exe` and `PixAuth.dll`.
-2. Close PixPin.
-3. Double-click `unlock.exe`.
-4. Select `1. 简体中文` or `2. English`.
-5. Select the install action and confirm with `y`.
-6. Launch PixPin when prompted, or launch it normally later.
+## 快速使用
 
-The tool displays its current status when it starts. It also prints the PE sections it inspected, the target RVA/file offset, backup verification, write operation, and SHA-256 verification.
+1. 将 `unlock.exe` 放到 PixPin 根目录，与 `PixPin.exe`、`PixAuth.dll` 放在一起。
+2. 关闭 PixPin。
+3. 双击运行 `unlock.exe`。
+4. 选择 `1. 简体中文`。
+5. 选择安装补丁并输入 `y` 确认。
+6. 按提示启动 PixPin，或稍后手动启动。
 
-## Menu Actions
+程序启动时会显示 PE 段分析、目标 RVA/文件偏移、备份校验、写入过程和 SHA-256 校验。
 
-| Choice | Action |
+## 菜单
+
+| 选项 | 功能 |
 | --- | --- |
-| 1 | Install or update the persistent local patch |
-| 2 | Restore the original `PixAuth.dll` |
-| 3 | Show detailed status and hashes |
-| 4 | Launch PixPin |
-| 5 | Exit |
+| 1 | 安装或更新本地补丁 |
+| 2 | 还原原始 `PixAuth.dll` |
+| 3 | 查看详细状态和哈希 |
+| 4 | 启动 PixPin |
+| 5 | 退出 |
 
-PixPin must be closed before installing or restoring the DLL. The original file is kept at `PixAuth.dll.unlock-original.bak`. Installation metadata is stored in `PixAuth.dll.unlock-state.json`.
+安装或还原前必须关闭 PixPin。原始文件保存在 `PixAuth.dll.unlock-original.bak`，状态记录保存在 `PixAuth.dll.unlock-state.json`。
 
-## Path Detection
+## 路径定位
 
-When started without arguments, the program resolves its own executable path with Windows `GetModuleFileNameW` and checks that directory first. If both `PixPin.exe` and `PixAuth.dll` are beside `unlock.exe`, that installation is selected.
+无参数运行时，程序只检查 `unlock.exe` 所在目录，并要求同目录同时存在 `PixPin.exe` 和 `PixAuth.dll`。
 
-If the files are not found there, the program does not guess another machine-specific path. The menu reports that automatic detection failed and tells the user to place the tool beside PixPin or provide an explicit path.
-
-For a non-default installation, use:
+找不到时不会猜测其他磁盘或固定路径。程序会提示将 `unlock.exe` 移动到 PixPin 根目录。自定义安装位置可以使用：
 
 ```powershell
 .\unlock.exe --exe "E:\Apps\PixPin\PixPin.exe"
 ```
 
-## Command-Line Mode
+## 命令行模式
 
-The interactive menu is the default. The original command-line operations remain available:
+默认启动是交互菜单，也保留命令行参数：
 
 ```powershell
 .\unlock.exe --status
@@ -48,23 +48,17 @@ The interactive menu is the default. The original command-line operations remain
 .\unlock.exe --help
 ```
 
-## Build
-
-Open an x64 Native Tools command prompt for Visual Studio 2022, or use the installed Build Tools environment:
+## 编译
 
 ```bat
 call D:\VSBuildTools\VC\Auxiliary\Build\vcvars64.bat
 cl /nologo /utf-8 /std:c++17 /O2 /EHsc /MT unlock_pixpin.cpp bcrypt.lib shell32.lib /link /SUBSYSTEM:CONSOLE /OUT:unlock.exe
 ```
 
-The `/MT` build embeds the C++ runtime. The resulting executable only imports system components (`bcrypt.dll` and `KERNEL32.dll`).
+`/MT` 会静态链接 C++ 运行库；生成文件只依赖系统组件 `bcrypt.dll` 和 `KERNEL32.dll`。
 
-## Scope
+## 范围与来源说明
 
-The patch changes the local `VipInfo::isVip()` gate in the currently analyzed PixPin build. It is reversible and guarded by PE format, x64, executable-section, signature, backup, and post-write hash checks. A vendor update that replaces `PixAuth.dll` may require running the installer again after reviewing the new build.
+补丁针对当前分析版本的本地 `VipInfo::isVip()` 门禁，支持备份、校验和还原。厂商更新 `PixAuth.dll` 后，可能需要重新分析并安装。
 
-The account page and cloud subscription data are server-backed presentation/data. This utility operates on the local DLL and does not modify an online account.
-
-## Provenance
-
-This repository contains the original utility source and its compiled executable. It does not include or redistribute PixPin or `PixAuth.dll`. PixPin and related names, software, and assets remain the property of their respective owners; this project is not affiliated with the PixPin developers.
+本仓库只包含工具源码和编译产物，不包含或重新分发 PixPin、`PixAuth.dll` 或其他原厂文件。PixPin 相关名称、软件和资源归其各自所有者所有，本项目与 PixPin 开发者没有关联。
