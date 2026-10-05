@@ -120,6 +120,21 @@ std::string narrow(const std::wstring& value) {
     return out;
 }
 
+bool installationFilesPresent(const fs::path& exe) {
+    if (exe.empty()) return false;
+    std::error_code ec;
+    const bool hasExe = fs::is_regular_file(exe, ec);
+    ec.clear();
+    const bool hasDll = fs::is_regular_file(exe.parent_path() / L"PixAuth.dll", ec);
+    return hasExe && hasDll;
+}
+
+void requireInstallation(const fs::path& exe) {
+    if (!installationFilesPresent(exe)) {
+        throw UnlockError("PixPin was not found beside this unlock.exe. Put unlock.exe in the PixPin directory, or pass --exe PATH");
+    }
+}
+
 std::wstring winError(DWORD error = GetLastError()) {
     wchar_t* buffer = nullptr;
     const DWORD n = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -290,11 +305,11 @@ void launchPixPin(const fs::path& exe) {
 }
 
 int install(const fs::path& exe, bool launch) {
+    requireInstallation(exe);
     const fs::path dll = exe.parent_path() / L"PixAuth.dll";
     const fs::path backup = sibling(dll, kBackupSuffix);
     const fs::path state = sibling(dll, kStateSuffix);
     std::cout << "[1/7] Installation root: " << narrow(exe.parent_path()) << "\n";
-    if (!fs::is_regular_file(exe) || !fs::is_regular_file(dll)) throw UnlockError("PixPin.exe or PixAuth.dll was not found beside the selected executable");
     std::cout << "[2/7] Checking PixPin process...\n";
     if (processRunning()) throw UnlockError("PixPin.exe is running; close it before installing");
     std::cout << "[3/7] Reading and parsing PixAuth.dll (" << fs::file_size(dll) << " bytes)...\n";
@@ -339,6 +354,7 @@ int install(const fs::path& exe, bool launch) {
 }
 
 int showStatus(const fs::path& exe) {
+    requireInstallation(exe);
     const fs::path dll = exe.parent_path() / L"PixAuth.dll";
     const fs::path backup = sibling(dll, kBackupSuffix);
     const fs::path state = sibling(dll, kStateSuffix);
@@ -356,6 +372,7 @@ int showStatus(const fs::path& exe) {
 }
 
 int restore(const fs::path& exe) {
+    requireInstallation(exe);
     const fs::path dll = exe.parent_path() / L"PixAuth.dll";
     const fs::path backup = sibling(dll, kBackupSuffix);
     const fs::path state = sibling(dll, kStateSuffix);
@@ -409,15 +426,16 @@ int interactive(const fs::path& exe) {
                   << "============================================================\n"
                   << "Expected PixPin: " << (exe.empty() ? "(unknown)" : narrow(exe)) << "\n\n"
                   << "Current status:\n";
-        if (!fs::is_regular_file(exe) || !fs::is_regular_file(exe.parent_path() / L"PixAuth.dll")) {
+        if (!installationFilesPresent(exe)) {
             std::cout << "  [!] PixPin was not found beside this unlock.exe.\n"
                       << "      Put unlock.exe in the PixPin directory, then run it again.\n"
                       << "      For a custom location, use: unlock.exe --exe PATH\n";
-        }
-        try {
-            showStatus(exe);
-        } catch (const std::exception& error) {
-            std::cout << "  Status unavailable: " << error.what() << "\n";
+        } else {
+            try {
+                showStatus(exe);
+            } catch (const std::exception& error) {
+                std::cout << "  Status unavailable: " << error.what() << "\n";
+            }
         }
         std::cout << "\nChoose an action:\n"
                   << "  1. Install / update local unlock patch\n"
@@ -447,6 +465,7 @@ int interactive(const fs::path& exe) {
                 showStatus(exe);
                 waitForEnter();
             } else if (choice == "4") {
+                requireInstallation(exe);
                 if (processRunning()) std::cout << "PixPin is already running.\n";
                 else launchPixPin(exe);
                 waitForEnter();
