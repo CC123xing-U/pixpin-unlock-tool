@@ -28,7 +28,7 @@ PixPin must be closed before installing or restoring the DLL. The original file 
 
 When started without arguments, the program resolves its own executable path with Windows `GetModuleFileNameW` and checks that directory first. If both `PixPin.exe` and `PixAuth.dll` are beside `unlock.exe`, that installation is selected.
 
-If the files are not found there, the program falls back to `D:\PixPin\PixPin.exe`. The menu reports that automatic detection failed and tells the user to place the tool beside PixPin or provide an explicit path.
+If the files are not found there, the program does not guess another machine-specific path. The menu reports that automatic detection failed and tells the user to place the tool beside PixPin or provide an explicit path.
 
 For a non-default installation, use:
 

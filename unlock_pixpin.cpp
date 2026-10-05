@@ -268,8 +268,11 @@ fs::path defaultExe() {
     if (length) {
         fs::path beside = fs::path(buffer).parent_path() / L"PixPin.exe";
         if (fs::is_regular_file(beside) && fs::is_regular_file(beside.parent_path() / L"PixAuth.dll")) return beside;
+        // Do not guess a machine-specific installation path. The caller gets a
+        // clear placement message and can use --exe for a custom location.
+        return beside;
     }
-    return fs::path(L"D:\\PixPin\\PixPin.exe");
+    return {};
 }
 
 void launchPixPin(const fs::path& exe) {
@@ -404,11 +407,12 @@ int interactive(const fs::path& exe) {
         std::cout << "\n============================================================\n"
                   << " PixPin Unlock Tool (local persistent patch)\n"
                   << "============================================================\n"
-                  << "Detected PixPin: " << narrow(exe) << "\n\n"
+                  << "Expected PixPin: " << (exe.empty() ? "(unknown)" : narrow(exe)) << "\n\n"
                   << "Current status:\n";
         if (!fs::is_regular_file(exe) || !fs::is_regular_file(exe.parent_path() / L"PixAuth.dll")) {
-            std::cout << "  [!] PixPin was not found automatically.\n"
-                      << "      Put unlock.exe beside PixPin.exe, or run with --exe PATH.\n";
+            std::cout << "  [!] PixPin was not found beside this unlock.exe.\n"
+                      << "      Put unlock.exe in the PixPin directory, then run it again.\n"
+                      << "      For a custom location, use: unlock.exe --exe PATH\n";
         }
         try {
             showStatus(exe);
@@ -474,7 +478,7 @@ int wmain(int argc, wchar_t** argv) {
         }
         if (argc == 1) return interactive(exe);
         std::cout << "PixPin unlock tool (local persistent patch)\n"
-                  << "Executable: " << narrow(exe) << "\n";
+                  << "Executable: " << (exe.empty() ? "(not detected)" : narrow(exe)) << "\n";
         if (action == Action::Status) return showStatus(exe);
         if (action == Action::Restore) return restore(exe);
         return install(exe, launch);
